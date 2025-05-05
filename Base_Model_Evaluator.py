@@ -154,3 +154,11 @@ class Base_Model_Evaluator:
         try: plt.figure(figsize=(8, 5)); plt.hist(confidence_values, bins=20, alpha=0.75, edgecolor='black'); plt.title(f'{model_name}: Confidence Distribution'); plt.xlabel('Confidence'); plt.ylabel('Count'); plt.grid(axis='y', alpha=0.5); plt.tight_layout(); plt.savefig(save_path); print(f"\nHist saved: '{save_path}'"); plt.close()
         except ImportError: print("\nInstall matplotlib to plot.")
         except Exception as plot_e: print(f"\nError plotting: {plot_e}")
+
+    def predict_single(self, question):
+        """
+        Predict the answer for a single question.
+        :param question: The input question.
+        :return: The predicted answer, confidence score, and uncertainty flag.
+        """
+        return self._get_constrained_answer(question)
