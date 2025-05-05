@@ -4,7 +4,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 
-class Fine_Tuned_Model_Evaluator: # Changed name
+class Fine_Tuned_Model_Evaluator: 
     def __init__(self, base_model_path, finetuned_path, csv_path, start_idx=1000, num_rows=None, confidence_threshold=0.2):
         """
         Initialize the evaluator with paths to the base model, fine-tuned model, and CSV file.
@@ -156,4 +156,10 @@ class Fine_Tuned_Model_Evaluator: # Changed name
         except ImportError: print("\nInstall matplotlib to plot.")
         except Exception as plot_e: print(f"\nError plotting: {plot_e}")
 
-# NECESSARY CHANGE: Remove original final execution block
+    def predict_single(self, question):
+        """
+        Predict the answer for a single question.
+        :param question: The input question.
+        :return: The predicted answer, confidence score, and uncertainty flag.
+        """
+        return self._get_constrained_answer(question)
