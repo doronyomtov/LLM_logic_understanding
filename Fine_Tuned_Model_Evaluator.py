@@ -84,39 +84,90 @@ class Fine_Tuned_Model_Evaluator:
             is_uncertain = abs(yes_prob - no_prob) < self.confidence_threshold
             return answer, confidence, is_uncertain, {"yes": yes_prob, "no": no_prob}
 
-    def evaluate(self, output_path='evaluation_results_finetuned.csv', plot_path='confidence_distribution_finetuned.png'): 
+    def evaluate(self, output_path='evaluation_results_base.csv', plot_path='confidence_distribution_base.png'):
         """
-        Evaluate the fine-tuned model on the dataset.
-        :param output_path: Path to save the evaluation results.
-        :param plot_path: Path to save the confidence distribution plot.
+        Evaluate the model on the dataset and save the results.
+        :param output_path: Path to save the evaluation results CSV file.
+        :param plot_path: Path to save the confidence distribution histogram.
         :return: A dictionary containing evaluation statistics.
         """
         try:
-            df_full = pd.read_csv(self.csv_path); df = df_full.iloc[self.start_idx:]
-        except Exception as e: print(f"Error loading CSV: {e}"); return None
+            df_full = pd.read_csv(self.csv_path);
+            df = df_full.iloc[self.start_idx:]
+        except Exception as e:
+            print(f"Error loading CSV: {e}"); return None
+
         if self.num_rows is not None and self.num_rows > 0:
-            df = df.sample(n=min(self.num_rows, len(df)), random_state=42)
-        elif self.num_rows == 0: df=df.head(0)
-        df = df.sample(frac=1, random_state=42).reset_index(drop=True) 
-        if len(df)==0: print("No data for Fine-tuned eval."); return None
-        stats = {"total": 0,"accuracy": 0,"uncertain": 0,"answer_dist": {"yes": 0,"no": 0},"correct_by_type": {"yes": 0,"no": 0},"total_by_type": {"yes": 0,"no": 0},"uncertain_by_type": {"yes": 0,"no": 0},"confidence_scores": [],"results": []}
-        for index, row in tqdm(df.iterrows(), total=len(df), desc="Evaluating Fine-tuned"):
-            question = row['query']; expected = str(row.get('answer', '')).strip().lower(); q_id = row.get('id', f"Index_{index}")
+            df = df.sample(n=min(self.num_rows, len(df)), random_state=42)  # Keep random_state for now
+        elif self.num_rows == 0:
+            df = df.head(0)
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)  # Keep random_state for now
+
+        if len(df) == 0: print("No data for Base eval."); return None
+
+        stats = {
+            "total": 0, "accuracy": 0, "uncertain": 0,
+            "answer_dist": {"yes": 0, "no": 0},
+            "correct_by_type": {"yes": 0, "no": 0},  # Based on Expected
+            "total_by_type": {"yes": 0, "no": 0},  # Based on Expected
+            "uncertain_by_type": {"yes": 0, "no": 0},
+            "confidence_scores": [],
+            "results": [],
+            "predicted_yes_correctly": 0,  # Predicted yes AND was correct
+            "total_predicted_yes": 0,  # Total times model predicted yes
+            "predicted_no_correctly": 0,  # Predicted no AND was correct
+            "total_predicted_no": 0  # Total times model predicted no
+        }
+
+
+        for index, row in tqdm(df.iterrows(), total=len(df), desc="Evaluating Base"):
+            question = row['query'];
+            expected = str(row.get('answer', '')).strip().lower();
+            q_id = row.get('id', f"Index_{index}")
             if not question or expected not in ["yes", "no"]: continue
             answer, conf, uncertain, probs = self._get_constrained_answer(question)
             if answer == "error": continue
             is_correct = answer == expected
-            stats["results"].append({"id": q_id,"question": question,"expected": expected,"predicted": answer,"confidence": conf,"yes_prob": probs["yes"],"no_prob": probs["no"],"is_uncertain": uncertain,"correct": is_correct})
-            print(f"\n--- QID: {q_id} ({stats['total']+1}/{len(df)}) ---")
-            print(f"Question: {question}"); print(f"Expected: {expected}"); print(f"Predicted: {answer}"); print(f"Result: {'Correct! ✅' if is_correct else 'Incorrect! ❌'}"); print("-" * 20)
-            stats["total"] += 1; stats["answer_dist"][answer] += 1; stats["confidence_scores"].append(conf)
-            if uncertain: stats["uncertain"] += 1; stats["uncertain_by_type"][expected] = stats["uncertain_by_type"].get(expected, 0) + 1
+            stats["results"].append(
+                {"id": q_id, "question": question, "expected": expected, "predicted": answer, "confidence": conf,
+                 "yes_prob": probs["yes"], "no_prob": probs["no"], "is_uncertain": uncertain, "correct": is_correct})
+
+            print(f"\n--- QID: {q_id} ({stats['total'] + 1}/{len(df)}) ---")
+            print(f"Question: {question}");
+            print(f"Expected: {expected}");
+            print(f"Predicted: {answer}");
+            print(f"Result: {'Correct! ✅' if is_correct else 'Incorrect! ❌'}");
+            print("-" * 20)
+
+            stats["total"] += 1
+            stats["answer_dist"][answer] = stats["answer_dist"].get(answer, 0) + 1  # Safer update
+            stats["confidence_scores"].append(conf)
+
+            if answer == "yes":
+                stats["total_predicted_yes"] += 1
+                if is_correct:  # Predicted yes, Expected yes
+                    stats["predicted_yes_correctly"] += 1
+            elif answer == "no":
+                stats["total_predicted_no"] += 1
+                if is_correct:  # Predicted no, Expected no
+                    stats["predicted_no_correctly"] += 1
+
+            if uncertain: stats["uncertain"] += 1; stats["uncertain_by_type"][expected] = stats[
+                                                                                              "uncertain_by_type"].get(
+                expected, 0) + 1
             stats["total_by_type"][expected] = stats.get("total_by_type", {}).get(expected, 0) + 1
-            if is_correct: stats["accuracy"] += 1; stats["correct_by_type"][expected] = stats.get("correct_by_type", {}).get(expected, 0) + 1
-        try: pd.DataFrame(stats["results"]).to_csv(output_path, index=False); print(f"\nFine-tuned results saved: {output_path}")
-        except Exception as e: print(f"Error saving fine-tuned CSV: {e}")
-        self._print_summary(stats, "Fine-tuned Model")
-        if stats["confidence_scores"]: self._plot_confidence_histogram(stats["confidence_scores"], "Fine-tuned Model", plot_path) 
+            if is_correct: stats["accuracy"] += 1; stats["correct_by_type"][expected] = stats.get("correct_by_type",
+                                                                                                  {}).get(expected,
+                                                                                                          0) + 1
+
+        try:
+            pd.DataFrame(stats["results"]).to_csv(output_path, index=False); print(
+                f"\nBase results saved: {output_path}")
+        except Exception as e:
+            print(f"Error saving base CSV: {e}")
+        self._print_summary(stats, "Base Model")
+        if stats["confidence_scores"]: self._plot_confidence_histogram(stats["confidence_scores"], "Base Model",
+                                                                       plot_path)
         return stats
 
     def _print_summary(self, stats, model_name="Model"):
