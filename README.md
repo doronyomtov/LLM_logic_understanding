@@ -25,7 +25,7 @@ This project provides a GUI-based tool for:
 - Transformers (Hugging Face)
 - `llama.cpp` or similar backend for LLaMA models
 - OpenAI API key (for ChatGPT comparison)
-- GPU (≥24GB VRAM recommended)
+- GPU (recommended)
 
 ## 🛠️ Setup
 
